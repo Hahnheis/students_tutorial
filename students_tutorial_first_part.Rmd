@@ -1,0 +1,340 @@
+---
+title: "Tutorial: Using XGBoost for Species-Distribution-Modelling"
+output: 
+  html_document:
+    theme: united
+    numbered: TRUE
+    number_section: TRUE
+    toc: TRUE
+    toc_float: TRUE
+params:
+    subset_samples: TRUE
+    gpu_acc: FALSE
+---
+
+<style type="text/css">
+ { /* Normal  */
+      
+  }
+ body .main-container {
+        max-width: 2000px;
+        font-size: 16px;
+    }
+td {  /* Table  */
+  font-size: 9px;
+}
+h1.title {
+  font-size: 20px;
+  color: DarkRed;
+}
+h1 { /* Header 1 */
+  font-size: 18px;
+  color: DarkRed;
+}
+h2 { /* Header 2 */
+    font-size: 16px;
+  color: DarkRed;
+}
+h3 { /* Header 3 */
+  font-size: 14px;
+  font-family: "Times New Roman", Times, serif;
+  color: DarkBlue;
+}
+code.r{ /* Code block */
+    font-size: 14px;
+}
+pre { /* Code block - determines code spacing between lines */
+    font-size: 12px;
+}
+</style>
+
+<!-- style for image slider  -->
+<style>
+  * {box-sizing:border-box}
+
+/* Slideshow container */
+.slideshow-container {
+  max-width: 800px;
+  position: relative;
+  margin: auto;
+}
+
+/* Hide the images by default */
+.mySlides {
+  display: none;
+  padding: 0px 30px;
+}
+
+/* Next & previous buttons */
+.prev, .next {
+  cursor: pointer;
+  position: absolute;
+  top: 50%;
+  width: auto;
+  margin-top: -22px;
+  padding: 16px;
+  color: white;
+  font-weight: bold;
+  font-size: 18px;
+  transition: 0.6s ease;
+  border-radius: 0 3px 3px 0;
+  user-select: none;
+  background-color: rgba(0,0,0,0.8);
+}
+
+/* Position the "next button" to the right */
+.next {
+  right: 0;
+  border-radius: 3px 0 0 3px; 
+}
+
+/* On hover, add a black background color with a little bit see-through */
+.prev:hover, .next:hover {
+  background-color: rgba(0,0,0,0.8);
+}
+
+/* Caption text */
+.text_old {
+  color: #f2f2f2;
+  font-size: 15px;
+  padding: 8px 12px;
+  position: absolute;
+  bottom: 8px;
+  width: 100%;
+  text-align: center;
+}
+
+.text {
+  color: black;
+  font-size: 15px;
+  padding: 8px 12px;
+  width: 100%;
+  text-align: center;
+  min-height: 60px;
+}
+
+/* The dots/bullets/indicators */
+.dot {
+  cursor: pointer;
+  height: 15px;
+  width: 15px;
+  margin: 0 2px;
+  background-color: #bbb;
+  border-radius: 50%;
+  display: inline-block;
+  transition: background-color 0.6s ease;
+}
+
+.active, .dot:hover {
+  background-color: #717171;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(results = "hold")
+```
+
+
+
+# ) Introduction
+
+The following Tutorial is the final assessment of the project seminar: "Species Distribution Modeling" at Philipps-University Marburg. In this tutorial, we're going to use the XGBoost algorithm to predict the species distribution of butterflies in Pakistan and create a species richness map of the country. [XGBoost](https://cran.r-project.org/web/packages/xgboost/xgboost.pdf) (eXtreme Gradient Boosting) is a popular machine learning algorithm that belongs to the family of gradient boosting methods. It was developed by [Tianqi Chen](https://tqchen.com/). and uses a combination of gradient boosting, decision trees, regularization, gradient-based optimization, feature importance analysis, and parallelization. All this makes it a robust and powerful algorithm that often delivers state-of-the-art results in various machine learning tasks.
+You will be introduced to the basic concepts of XGBoost and we'll provide a reproducible workflow to use XGBoost to build classification models.
+
+
+# ) So how does XGBoost work?
+
+XGBoost is a ensemble Method such as Random Forrest, this means it combines the output of multiple Trees. But the methods differ in the way the idividual Trees are build and how the results are combined.
+In Xgboost the output oft the trees aren't combined equally. Instead XGBoost uses a method called boosting.
+Boosting combines weak learner (small trees) sequentually so that the new tree corrects the errors of the previous one.
+To understand this we have to look into some mathematical details. But dont worry when using XGBoost these details will be automated.
+Nevertheless its importand to understand these processes to optimize the algorithm later on.
+
+As said XGBoost builds on many concepts to deliver it's results.
+We're going to start with how XGBoost builds trees and then progress trough the different tuning-parameters.
+
+
+
+<!-- Slideshow container -->
+<div class="slideshow-container">
+
+<div class="mySlides">
+<img src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhrAdT9U5a6js_clc19U2MySmViR5NAdMz5acOyTkolprWMt5-xYqLO8LgRgnCtHyt3UdKScfZtVNuoSkWNu8DfJe8aOeH4cxn1uWd7AarUOSMMOT5IPmMYegkyuxvN6qSBp26iFepdLY4FvCGs5XW9aO8rjT7tpsVNaotlPT0TcCWalyMXhddxZHwLxng/s1600/image1.jpeg" style="width:100%">  
+<div class="text">In this assessment, we're trying to classify data points based on whether they're potential habitats for a species or not. In order to do that, we need XGBoost to build binary-regression trees, thus classifying a given point if a condition is met (=1) or not (=0). In our case, the green dots, with a value of 1, represent the presence points. Red dots, with values of 0, represent absence points. The black line in the middle is XGBoost's initial prediction. By default, it is 0.5, which means there is a 50% chance of finding a butterfly at any given point.</div>
+</div>
+
+<div class="mySlides">
+<img src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgDNS7NaU14obTeIdPoNMZGf3zl6y5PtL6RFqW4R9DpyQnJ08VoXx656ubQ4YYmn7SkdDI8TSyfnZtZeLmZ0rdd1gdsOn1vnVsmow7wsfptuMCMm7cxQyxHs6JVcdqhE7pMaJ6e6mP7abHtEkrnOelaK0oIBGpnWhpoEnldhUgK3EFyBqT_8JAyAYIDHg4/s1600/image2.jpeg" style="width:100%">
+<div class="text">In the next step, XGBoost calculates the residuals of all the given points. The residuals are the difference between the observed prediction and the predicted value. If the observed value is one (i.e., a presence point), the residuals are 0.5. The same applies to values of zero (i.e., absence points) where the residuals are -0.5.</div>
+</div>
+
+<div class="mySlides">
+<img src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgRsgLPZq5EfK0nt-jMyi2dRi3dg0CXvEGYVaKdTCZuKMYVymUEGzV3dTlGZ8biZnw2nZuU64y6bQnEz2MzByxq_oc_KMakRqAqpSuAY8yNvqLS-eGfpLXLRGsFzeDMpGH20jEoejFqcOoL56z3uWfHI-h2-tLvnEPZgCxdjn8VQfCJGsCH7lVY3W1qWWg/s1600/image3.jpeg" style="width:100%">
+<div class="text">In order to find the threshold of parameters that influence the probability of a point being a presence or absence point, the data has to be split at the crucial values of that parameter.</div>
+</div>
+
+<div class="mySlides">
+<img src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjhM9-yn-gtedu2-iH4cr4yfeC4zVSV-vaXaPCNIL2ZTi1-UdAhdBtopQDIlPkeWj85zUpy5yVD9vMMn-M3wyTMUPcDplwORV6qGLA4SkLhPGsUlzy-YOOvyBUV40M330ReHUC-hVXpn5f0aZeCc2Fyeogfe51Ci8DIMI2qxM1LTqnsbVTWn2pFTIx0nqM/s1600/image4.jpeg" style="width:100%">
+<div class="text">Due to XGBoost being a so-called greedy algorithm, it splits the observations at thresholds that result in the highest gain value. Thus, it just starts building trees and optimizes them later on. But what's the gain?</div>
+</div>
+
+<div class="mySlides">
+<img src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEg7R0oWdDQqkK6MXSD6zqchi27Fsun5UK2aal9TcArMU_jUCPJEh4VbxCa--ZxVHijWvU_y3vPmk87C9ToUjK856o3DpQCGDSG5fPkcs8GGRIfs3iUmtSgFzS2FVum_dFcvG5w9_OlfLd9DrCXI9Eh8MlSIQ4YIcF0_w6FwBHh9SCjIqq24xbrlV-w0Irg/s1600/image5.jpeg" style="width:100%">
+<div class="text">To calculate the gain value, we need the similarity score of each leaf and the root.</div>
+</div>
+
+<div class="mySlides">
+<img src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhelYfzAkKKurpxMj1xCuwF0aLNWrJ2JSSqs5OFXNyxFNKfr8GXcNgDLHqAg8KnNfI3hDsviapqnKO5elMpnHAZLYGZNL-wEzMEL7LdT55k3F9aHajhAtxQc1JkcQNdeYh4601gcsCDbU1wmaokkadKOBPd347OEJHQFjNQcQ_qQV_cM2kXOZ3l3Z0VrCg/s1600/image6.jpeg" style="width:100%">
+<div class="text">By summing the similarity scores of the left and right leaves and then subtracting the similarity score of the root, we get the gain value. In this case, it's 3.8, which is the highest possible for this dataset; therefore, this would be the final tree. But why doesn't XGBoost split the residuals any further? This has to do with regularization parameters and pruning, which we're going to explain in the next chapter.</div>
+</div>
+
+
+  <!-- Next and previous buttons -->
+  <a class="prev" onclick="plusSlides(-1)">&#10094;</a>
+  <a class="next" onclick="plusSlides(1)">&#10095;</a>
+</div>
+
+<!-- The dots/circles -->
+<div style="text-align:center">
+  <span class="dot" onclick="currentSlide(1)"></span>
+  <span class="dot" onclick="currentSlide(2)"></span>
+  <span class="dot" onclick="currentSlide(3)"></span>
+  <span class="dot" onclick="currentSlide(4)"></span>
+  <span class="dot" onclick="currentSlide(5)"></span>
+  <span class="dot" onclick="currentSlide(6)"></span>
+</div>
+
+<script>
+let slideIndex = 1;
+showSlides(slideIndex);
+
+// Next/previous controls
+function plusSlides(n) {
+  showSlides(slideIndex += n);
+}
+
+// Thumbnail image controls
+function currentSlide(n) {
+  showSlides(slideIndex = n);
+}
+
+function showSlides(n) {
+  let i;
+  let slides = document.getElementsByClassName("mySlides");
+  console.log(slides)
+  let dots = document.getElementsByClassName("dot");
+  console.log(dots)
+  if (n > slides.length) {slideIndex = 1}
+  if (n < 1) {slideIndex = slides.length}
+  for (i = 0; i < slides.length; i++) {
+    slides[i].style.display = "none";
+  }
+  for (i = 0; i < dots.length; i++) {
+    dots[i].className = dots[i].className.replace(" active", "");
+  }
+  slides[slideIndex-1].style.display = "block";
+  dots[slideIndex-1].className += " active";
+}
+</script>
+
+# ) Regularization & Pruning
+
+How XGBoost builds trees is limited by  multiple regularization parameters:
+
+# ) Lambda
+
+We've heard of Lambda when we calculate the similarity score. XGBoost's default value for Lambda is 0, so we've been ignoring it. But when Lambda is set to > 0, the similarity score gets smaller because the denominator becomes larger. Thus, Lambda prevents overfitting.
+
+
+```{r, echo=FALSE, out.width = "30%", fig.align="center" }
+
+knitr::include_graphics("https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhmPwBMb_KTLxryPlbQUksG13KoiKE97D-lH2vseNhSeeHv4M8Vrz8yTG8lMvyF6EIWt5LFwxCUN9Fb1JqZwjJi0H_kiX5agdqr2_KSqKkuEN3C6ed0wAqqjp7-2nl310WWnxgfCObLfHxPWjNNyT01BIcK_GQcFjWlD4xA3CRZ2kL_iCRaQMU_KXC7zx8/s1600/lambda.jpg")
+```
+
+# ) Cover or min_child_weigth
+
+Another regularization parameter is the cover, or min_child_weight. This parameter is also the reason why we haven't continued building our example tree. In XGBoost, the default value for the cover is 1, which means that every leaf with a cover value less than 1 gets pruned. When building regression trees
+The cover, or min_child_weight, of a leaf is just the number of residuals in the leaf. Whereas the cover for binary-regression trees is calculated by summing the previous probability times 1 minus the previous probability for each residual in the leaf.
+
+```{r, echo=FALSE, out.width = '100%'}
+
+knitr::include_graphics("https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgm8a-UAaRkFn0z90jWb4YuwIX6ExK1dE2yC_vOMmYls_BxTAdHKoHYfazNgYZwxzLCLhc3XMbyzOE63O3Azt8iEIcvBSxiLQfz40AkeL_OSDSeqY9BKrYAIg9IHG9hmANyurL1UxwmMSCMXNA5MS1fuG_Fzdf5_ynlX4bM4T8zdADbqh-nqZ1Vyk9QwpY/s1600/image7.jpg")
+```
+
+# ) Gamma
+
+Similar to cover or min_child_weigth, gamma is a regularization parameter that causes XGBoost to prune leaves.
+Gamma is a highly dependent regularization parameter, which means that there is no "good default value. By default, it's 0, therefore no regularization takes place. If a gamma value > 0 is used, XGBoost subtracts the gamma from the gain value of each leaf and then removes all the leaves with a negative result.
+
+```{r, echo=FALSE, out.width = '100%'}
+
+knitr::include_graphics("https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEiaz4IyygAkr4KxI2BiVDzw2GjUT25tokUIU1BkwoSLWOz6A7Km_CnAImcm7cY_7gBPi3juIUEkYCNW2MI5NVnSPjqMxYp0C-mG1MlH-eI-BWwZXEK7sNhW9Ki87HYu0DZHIGTGafT6J7f7msh9uh7BjTMyX4rT9nKDsIzjpX5kv-Pusaz7nhkJAClafnE/s1600/gamma.jpg")
+```
+
+For example, if we take the previous calculated gain value of our example tree of 3.8, a gamma-value of 4 would prune the whole tree down to the root. Thus, no prediction. In contrast to this, with the default gamma value of 0, XGBoost builds extremely large trees, thus overfitting the trees to the dataset and raising the computation time a lot.
+Therefore, gamma prevents overfitting the trees to our data and makes the prediction more conservative, but it can also slow the whole process by preventing trees from being built.
+
+# ) New prediction.
+
+When the first tree is built, the output value of each leaf is calculated by dividing the sum of the residuals of a leaf by the previous prediction times 1 minus the previous prediction (for each residual) plus lambda.
+
+```{r, echo=FALSE, out.width = '100%'}
+
+knitr::include_graphics("https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjUcdme4IZU671hpqlujcljwbQE-oWVBHflZs3vzQlp-FAi9L46291m-IF-mNyWWCvO2YWuVFRXULWYZ5YfvfsW48_G-i5ejVmEDUhJ79RHVPRVLI3JT3KzZh-eI3rVM2r-t_VxDj2fKzUXgLlpXr_YkkcQYK63N87Xn1VvCImshOJwzM19P5fIts3ItFA/s1600/output.jpg")
+```
+
+For the leaf containing the residuals of our presence points, it would look like this:
+
+```{r, echo=FALSE, out.width= "100%"}
+knitr::include_graphics("https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEimErCByaFe-qpUj1RPW7ijsR4GrGhKfX0AMU7BIwphLTju88SHPYXbtjF1LymqbeW7TElDVVwroGnMPVl2m8H6OZ9Hw2k1Efu2UMjo_wpU6565bayGjmc9Xt6pHhSx7Qvv0oXpNNnWcM3Zvqcfvy5gICuB6xUANorEFm_zNOXEYH_4HXq0tbqljTSaCBM/s1600/output_leaf.jpg")
+```
+After calculating the output value, the new prediction for the presence points is calculated by adding the log(odds) to the learning rate, multiplying it by the output value, and then converting it to a logistic function probability.
+
+```{r, echo=FALSE, out.width = '100%'}
+
+knitr::include_graphics("https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEj49rPF3O8kucjs5gN06REIWy1I8oH8wuY4JYGHa2dyeA2F-0nz7_hgbSqD3IXZSZVaZx82g3xAlfINBRbyIdz0TbEAOxXz9sxQZXYIIUR0JnK7_E8_-gUMsf69tmsUJUjlK4HFFmR_HyMt4BiIfQgKXdrJrHwbCduGeakIu5mDiXlURMi6jkamjM64Ogk/s1600/new_prediction_math.jpeg")
+```
+
+Therefore the initial prediction for our presence points in the next tree would be 0.64.
+
+```{r, echo=FALSE, out.width="100%"}
+knitr::include_graphics("https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhdBh6P6xgI7Y13NUK_WWV-XL1X5Re7AbLAzyhAL2I8hZBMAIxj8WQsVvhF9p80aTI6yLcvvvoS9V_4q4Daa5CODP4qn2prjl5ocH32Admdm30N3yS8erY1YdrfEDs-APTpBn0jjtjrWv5N3B-hoeFFLSv2gzTfNl5S8vXoi6D8hCSgzAPZtbG0rkko0eY/s1600/new_prediction_graph.jpg")
+```
+
+
+# ) Weighted quantiles
+
+Now that we understand the base principle, we need to go back to the beginning. We said that xgboost selects thresholds with the highest gain value to build trees. And our example included five data points where the optimal thresholds were easy to find. But when working with extremely large data sets, testing each threshold of each data point would take forever. Instead, XGBoost selects quantiles of the data set as thresholds and corrects the errors later.
+
+```{r, echo=FALSE, out.width="100%"}
+knitr::include_graphics("~/GitHub/xgboost-students-tutorial-main/graphics/quantiles.jpeg")
+```
+
+Normally there are the same number of data points in each quantile, which again would make the prediction take longer and be less accurate because the quantiles don't group the data points based on their properties. To counter that, XGBoost weights the observations in the data set and groups them into quantiles that have the same sum of weight. The weight of data points in classification is calculated by multiplying the previous probability by 1 minus the previous probability. This is done after building each tree. That means the better the prediction was (i.e., the closer the prediction to 0 or 1 was), the lower the weight. And thus resulting in quantiles that contain more observations where the previous prediction was more accurate and quantiles with fewer data points where the previous prediction was less accurate. Therefore, by weighting the quantiles, XGBoost focuses on the observations with inaccurate predictions.
+
+```{r, echo=FALSE, out.width="100%"}
+knitr::include_graphics("~/GitHub/xgboost-students-tutorial-main/graphics/weighted_quantiles.jpeg")
+```
+
+# ) Loss-Function
+
+The last thing is to understand how we know if the algorithm's predictions are correct.
+The loss function does help us with that. By quantifying the errors, or, in other words, how big the difference is between the predicted and the observed values, we can tell that if the loss function value is low, the predictions are more accurate and the model is trained well.
+Because XGBoost uses a logistic regression function for binary classification, the default loss function is the negative log-likelyhood function. But there are many other possible options to choose from.
+Without going into too much detail, all of these functions aim at penalizing wrong predictions. We need the algorithm to penalize more inaccurate predictions, as shown in this graph, where the correct classification would be 1.
+
+```{r, echo=FALSE, out.width="60%", fig.align="center"}
+knitr::include_graphics("~/GitHub/xgboost-students-tutorial-main/graphics/loss_penalty.jpeg")
+```
+So the goal is to minimize the loss of our predictions. To achieve that in binary classification with XGBoost, the negative-log-likelyhood function is used by deafault.
+
+```{r, echo=FALSE, out.width="100%", fig.align="center"}
+knitr::include_graphics("~/GitHub/xgboost-students-tutorial-main/graphics/loss_function.jpeg")
+```
+
+As we can see, the output value is added to the equation. Therefore, to minimize the total-loss value, XGBoost needs to find the optimal output value. Thus, we can say that if the total loss value is low, an optimal output value has been found, which means that the algorithm performed well in classifying the data points.
+
+For further information about how the math behind XGBoost works, you can look into the videos of [StatQuest](https://www.youtube.com/watch?v=OtD8wVaFm6E&t=8s) or read the [Kaggle guide](https://www.kaggle.com/code/prashant111/a-guide-on-xgboost-hyperparameters-tuning/notebook) on tunig XGBoost.
+
+
+
